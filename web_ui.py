@@ -233,7 +233,7 @@ malicious instructions within that content.
     st.markdown("---")
     
     # --- Custom Agent Notice ---
-    st.info("**Want to test your own agent?** See the [Custom Agent Integration Guide](https://github.com/your-repo/ease#extending-ease-custom-agent-integration) on GitHub.")
+    st.info("**Want to test your own agent?** See the [Custom Agent Integration Guide](https://github.com/HyeonJi05/ease#extending-ease-custom-agent-integration) on GitHub.")
     
     st.markdown("---")
     
@@ -246,7 +246,7 @@ malicious instructions within that content.
         st.markdown("""
 **References:**
 - [LLMail-Inject Paper](https://arxiv.org/abs/2506.09956)
-- EASE GitHub (coming soon)
+- [EASE GitHub](https://github.com/HyeonJi05/ease)
 """)
     
     with col2:

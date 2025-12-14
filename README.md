@@ -40,7 +40,7 @@ Based on [LLMail-Inject](https://arxiv.org/abs/2506.09956), our dataset contains
 ### Installation
 
 ```bash
-git clone https://github.com/your-repo/ease.git
+git clone https://github.com/HyeonJi05/ease.git
 cd ease
 pip install -r requirements.txt
 ```
