@@ -67,6 +67,17 @@ Get API keys from your preferred LLM provider:
 
 ### Running Web UI
 
+Before running, set up your environment variables:
+```bash
+# Windows
+copy .env.example .env
+
+# Mac/Linux
+cp .env.example .env
+# Edit .env with your API keys and Gmail accounts
+```
+
+Then start the web UI:
 ```bash
 streamlit run web_ui.py
 ```
