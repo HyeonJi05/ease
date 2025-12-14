@@ -1,0 +1,47 @@
+# Environment & Secrets
+.env
+!.env.example
+
+# OAuth Credentials & Tokens (NEVER commit these!)
+credentials_*.json
+token_*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Logs & Reports
+logs/
+reports/
+results/
+
+# Azure Storage (local dev)
+__azurite_db_*.json
+__blobstorage__/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files (development only)
+test_*.py
+groqtest.py
+auto_fix*.py
+check_structure.py
+main.py
+
+# Korean filename docs (development only)
+*개발중*
+*설계정리*

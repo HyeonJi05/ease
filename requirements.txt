@@ -1,0 +1,54 @@
+# ============================================================================
+# 평가 프레임워크 의존성 (Dependencies)
+# ============================================================================
+
+# 🔐 환경변수 관리
+python-dotenv==1.0.0
+
+# 📧 Google Gmail API
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.108.0
+
+# 🤖 AI 모델 API
+anthropic==0.28.1
+openai==1.14.2
+
+# 📊 데이터 처리
+pandas==2.2.0
+numpy==1.24.0
+
+# 📈 클러스터링 (공격 유형 분류)
+scikit-learn==1.4.2
+
+# 📝 JSON/CSV 처리
+python-json-logger==2.0.7
+
+# 🔄 비동기 처리
+aiohttp==3.9.3
+asyncio-contextmanager==1.0.1
+
+# 📅 시간 처리
+python-dateutil==2.8.2
+
+# 🎨 테이블 출력
+tabulate==0.9.0
+
+# ⚙️ 설정 관리
+python-dotenv==1.0.0
+
+# 🧪 테스팅 (선택사항)
+pytest==7.4.3
+pytest-asyncio==0.23.2
+
+# 📦 기타
+requests==2.31.0
+urllib3==2.1.0
+
+# 🌐 External Agent API (사용자 Agent 서버 연동)
+fastapi==0.109.0
+uvicorn==0.27.0
+httpx==0.26.0
+
+# 🖥️ Web UI
+streamlit==1.31.0
