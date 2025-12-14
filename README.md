@@ -42,6 +42,7 @@ Based on [LLMail-Inject](https://arxiv.org/abs/2506.09956), our dataset contains
 ```bash
 git clone https://github.com/HyeonJi05/ease.git
 cd ease
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
