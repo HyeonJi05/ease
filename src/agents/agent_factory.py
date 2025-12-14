@@ -224,7 +224,7 @@ class AgentFactory:
         Returns:
             list: 지원하는 Agent 이름 목록
         """
-        return ['claude', 'gpt', 'gemini', 'groq', 'deepinfra', 'external']
+        return ['claude', 'gpt', 'gemini', 'external']
     
     @staticmethod
     def get_available_agents() -> dict:
