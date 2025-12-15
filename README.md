@@ -15,7 +15,7 @@ EASE helps email agent developers and operators evaluate how resistant their age
 
 ## Features
 
-- **Multi-LLM Support** — Claude 4.5 Sonnet, GPT-4o, Gemini 2.0 Flash (+ Groq, DeepInfra)
+- **Multi-LLM Support** — Claude 4.5 Sonnet, GPT-4o, Gemini 2.0 Flash
 - **Defense Comparison** — Compare attack success rates with/without defense prompts
 - **Custom Defense Prompts** — Test your own defense strategies
 - **Attack Dataset** — 639 attack samples across 6 attack types (based on LLMail)
@@ -68,16 +68,17 @@ Get API keys from your preferred LLM provider:
 ### Running Web UI
 
 Before running, set up your environment variables:
+
 ```bash
 # Windows
 copy .env.example .env
 
 # Mac/Linux
 cp .env.example .env
-# Edit .env with your API keys and Gmail accounts
 ```
 
-Then start the web UI:
+Edit `.env` with your API keys and Gmail accounts, then start the web UI:
+
 ```bash
 streamlit run web_ui.py
 ```
@@ -99,56 +100,57 @@ An attack is considered **successful** when all three conditions are met:
 
 ## Extending EASE (Custom Agent Integration)
 
-To test your own email agent with EASE:
+To test your own email agent with EASE, implement the `EmailAgent` base class:
 
 ### 1. Create Agent Module
 
-Create a new file in `src/agents/` (e.g., `my_agent.py`):
+Copy `examples/my_agent.py` to `src/agents/` and implement your LLM logic:
 
 ```python
 from .base import EmailAgent
+from src.config import DEFENSE_PROMPTS
 
 class MyAgent(EmailAgent):
     def __init__(self, api_key: str, gmail_tools, system_prompt: str = None):
-        # Initialize your LLM client
         self.client = YourLLMClient(api_key=api_key)
         self.gmail = gmail_tools
-        self.system_prompt = system_prompt
+        self.system_prompt = system_prompt or DEFENSE_PROMPTS['none']['prompt']
+        self.model = "your-model-name"
     
-    def get_tools(self):
-        # Return tool definitions for your LLM
-        pass
+    def get_tools_schema(self) -> list:
+        # Return tool definitions for your LLM API
+        return [...]
     
     def get_provider_name(self) -> str:
         return 'my_agent'
     
     def get_model_name(self) -> str:
-        return 'your-model-name'
+        return self.model
     
-    async def process_email(self, user_message: str) -> dict:
-        # Implement email processing logic
-        # Return: {'message': str, 'tools_used': list}
+    async def process_message(self, user_message: str, conversation_history: list = None) -> dict:
+        # Implement LLM API call and tool execution loop
+        # Return: {'message': str, 'tools_used': list, 'conversation': list, 'raw_response': any}
         pass
 ```
 
 ### 2. Register Agent in Factory
 
-Edit `src/agents/factory.py`:
+Edit `src/agents/agent_factory.py`:
 
 ```python
 from .my_agent import MyAgent
 
-class AgentFactory:
-    @staticmethod
-    def create(agent_type: str, ...):
-        # Add your agent
-        if agent_type == 'my_agent':
-            return MyAgent(api_key, gmail_tools, system_prompt)
+# Add to _get_supported_agents():
+return ['claude', 'gpt', 'gemini', 'my_agent']
+
+# Add to create_agent():
+if agent_name == 'my_agent':
+    return MyAgent(api_key, gmail_tools, system_prompt)
 ```
 
-### 3. Update UI (Optional)
+### 3. Update UI
 
-Edit `web_ui.py` to add your agent to the selection:
+Edit `web_ui.py`:
 - Add checkbox in Configuration page
 - Add to agent selection in Benchmark page
 
@@ -179,9 +181,7 @@ ease/
 │   ├── attack_dataset.csv
 │   └── normal_mails.csv
 ├── examples/
-│   ├── README.md
-│   ├── my_agent.py
-│   └── api_server.py
+│   └── my_agent.py
 └── src/
     ├── __init__.py
     ├── config.py
@@ -192,9 +192,6 @@ ease/
     │   ├── claude_agent.py
     │   ├── gpt_agent.py
     │   ├── gemini_agent.py
-    │   ├── groq_agent.py
-    │   ├── deepinfra_agent.py
-    │   ├── external_agent.py
     │   └── tool_name_mapper.py
     ├── assessment/
     │   ├── __init__.py
