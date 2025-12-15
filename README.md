@@ -121,7 +121,7 @@ class MyAgent(EmailAgent):
         # Return tool definitions for your LLM API
         return [...]
     
-    def get_provider_name(self) -> str:
+    def get_agent_name(self) -> str:
         return 'my_agent'
     
     def get_model_name(self) -> str:

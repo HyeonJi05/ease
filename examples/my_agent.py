@@ -146,7 +146,7 @@ class MyAgent(EmailAgent):
             }
         ]
     
-    def get_provider_name(self) -> str:
+    def get_agent_name(self) -> str:
         return 'my_agent'
     
     def get_model_name(self) -> str:
