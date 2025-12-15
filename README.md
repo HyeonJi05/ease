@@ -55,6 +55,7 @@ Follow the [Google Cloud OAuth Setup Guide](https://developers.google.com/worksp
 2. Enable Gmail API
 3. Create OAuth 2.0 credentials (Desktop App)
 4. Download `credentials.json`
+5. Add two Gmail accounts as test users (Victim and Attacker)
 
 ### API Keys
 
