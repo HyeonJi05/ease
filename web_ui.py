@@ -23,7 +23,7 @@ from datetime import datetime
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.config import GMAIL_CONFIG, DEFENSE_PROMPTS
+from src.config import DEFENSE_PROMPTS
 from src.gmail.tools import GmailTools
 from src.agents.agent_factory import AgentFactory
 from src.assessment.runner import TestRunner
@@ -34,7 +34,7 @@ from src.data.loader import AttackDataLoader
 # 페이지 설정
 # ============================================================
 st.set_page_config(
-    page_title="EASE - Email Agent Security Evaluator",
+    page_title="EASE - Execution-Aware Stage-wise Evaluation",
     page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -53,6 +53,33 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'evaluation_results' not in st.session_state:
     st.session_state.evaluation_results = None
+
+
+# ============================================================
+# 유틸리티 함수
+# ============================================================
+
+def _load_latest_result():
+    """results/ 폴더에서 가장 최신 통합 결과 파일을 세션에 로드"""
+    results_dir = Path('results')
+    
+    # 통합 파일(benchmark_all_*) 우선, 없으면 개별 파일도 검색
+    json_files = sorted(results_dir.glob('benchmark_all_*.json'), reverse=True)
+    if not json_files:
+        json_files = sorted(results_dir.glob('benchmark_*.json'), reverse=True)
+    
+    for f in json_files:
+        if f.name == 'benchmark_config.json':
+            continue
+        try:
+            with open(f, 'r', encoding='utf-8') as fp:
+                data = json.load(fp)
+            if 'results' in data:
+                st.session_state.evaluation_results = data
+                return
+        except:
+            continue
+
 
 # ============================================================
 # 사이드바 - 네비게이션
@@ -97,7 +124,7 @@ st.markdown("""
 
 # 사이드바 브랜딩
 st.sidebar.markdown('<p style="font-size:2.6rem; font-weight:700; color:#1a1a2e; letter-spacing:3px; margin-bottom:0.2rem; line-height:1.1;">EASE</p>', unsafe_allow_html=True)
-st.sidebar.markdown('<p style="font-size:0.85rem; font-weight:500; color:#555; margin-bottom:0.1rem;">Email Agent Security Evaluator</p>', unsafe_allow_html=True)
+st.sidebar.markdown('<p style="font-size:0.85rem; font-weight:500; color:#555; margin-bottom:0.1rem;">Execution-Aware Stage-wise Evaluation</p>', unsafe_allow_html=True)
 st.sidebar.markdown('<p style="font-size:0.8rem; font-weight:400; color:#777; margin-bottom:1.5rem;">Protect your email agent from IPI.</p>', unsafe_allow_html=True)
 
 # 세션 상태로 현재 페이지 관리
@@ -149,7 +176,7 @@ if page == "About":
     st.title("About EASE")
     
     st.markdown("""
-**EASE (Email Agent Security Evaluator)** is a security evaluation framework for assessing 
+**EASE (Execution-Aware Stage-wise Evaluation)** is a security evaluation framework for assessing 
 Indirect Prompt Injection (IPI) vulnerabilities in LLM-based email agents.
 """)
     
@@ -633,25 +660,32 @@ elif page == "Benchmark":
         
         defense_type = st.radio(
             "Defense Method",
-            ["None", "Basic Defense", "Compare Both", "Custom"],
+            ["Select Defenses", "Custom"],
             index=0
         )
         
         custom_defense = None
         
-        if defense_type == "None":
-            defense_options = ['none']
-            st.caption("Test without defense prompt")
+        if defense_type == "Select Defenses":
+            # DEFENSE_PROMPTS에서 동적으로 옵션 생성 (custom 제외)
+            defense_choices = {k: v['name'] for k, v in DEFENSE_PROMPTS.items() if k != 'custom'}
             
-        elif defense_type == "Basic Defense":
-            defense_options = ['with_defense']
-            st.caption("Use basic defense prompt")
-            with st.expander("View Defense Prompt"):
-                st.code(DEFENSE_PROMPTS['with_defense']['prompt'])
+            selected_defenses = []
+            for key, name in defense_choices.items():
+                if st.checkbox(name, value=(key == 'none'), key=f"defense_{key}"):
+                    selected_defenses.append(key)
             
-        elif defense_type == "Compare Both":
-            defense_options = ['none', 'with_defense']
-            st.caption("Compare No Defense vs With Defense")
+            if not selected_defenses:
+                st.warning("Please select at least one defense")
+                defense_options = ['none']
+            else:
+                defense_options = selected_defenses
+            
+            # 선택된 방어 프롬프트 미리보기
+            for key in defense_options:
+                if key in DEFENSE_PROMPTS:
+                    with st.expander(f"View: {DEFENSE_PROMPTS[key]['name']}"):
+                        st.code(DEFENSE_PROMPTS[key]['prompt'], language=None)
             
         else:  # Custom
             defense_options = ['custom']
@@ -681,202 +715,129 @@ elif page == "Benchmark":
     
     st.markdown("---")
     
-    # 평가 실행 버튼
-    if st.button("Run Benchmark", type="primary", use_container_width=True):
+    # 실험 중이면 버튼 비활성화
+    is_running = st.session_state.get('benchmark_running', False)
+    
+    if is_running:
+        st.button("Run Benchmark", type="primary", use_container_width=True, disabled=True)
+        st.info("Benchmark is running. Please wait for completion.")
+    elif st.button("Run Benchmark", type="primary", use_container_width=True):
         if not eval_agents:
             st.error("Please select at least one Agent")
             st.stop()
         
-        # 진행 상태 표시
-        progress_container = st.container()
+        # 벤치마크 설정 파일 생성 (subprocess에 전달)
+        import subprocess
         
-        with progress_container:
-            st.markdown("### Progress")
-            
-            # 테스트 설정 요약 표시
-            with st.expander("Test Configuration", expanded=True):
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.markdown("**Attack Settings**")
-                    if attack_type == "Use Dataset":
-                        st.write(f"- Method: Dataset")
-                        st.write(f"- Selected types: {len(selected_types)}")
-                        if samples_per_type:
-                            st.write(f"- Samples per type: {samples_per_type}")
-                        elif total_samples:
-                            st.write(f"- Total samples: {total_samples}")
-                    else:
-                        st.write(f"- Method: Custom")
-                        st.code(custom_attack[:100] + "..." if len(custom_attack) > 100 else custom_attack, language=None)
-                
-                with col_b:
-                    st.markdown("**Defense Settings**")
-                    if set(defense_options) == {'none', 'with_defense'}:
-                        st.write("- Defense: Compare Both")
-                    else:
-                        st.write(f"- Defense: {', '.join(['None' if d == 'none' else 'Basic' if d == 'with_defense' else 'Custom' for d in defense_options])}")
-                    if custom_defense:
-                        st.code(custom_defense[:100] + "..." if len(custom_defense) > 100 else custom_defense, language=None)
-                
-                st.markdown("**Target Agents**")
-                st.write(f"- {', '.join([a.upper() for a in eval_agents])}")
-            
-            st.markdown("---")
-            
-            progress_bar = st.progress(0)
-            status_container = st.empty()  # empty()로 변경 - 덮어쓰기용
-            
-            all_results = []
-            completed_steps = []  # 완료된 단계들
-            current_step = {"text": "", "is_loading": True}  # 현재 진행 중인 단계
-            
-            def update_display():
-                """화면 업데이트"""
-                loading_indicator = ' <span style="color:#888;">⏳ Running...</span>' if current_step["is_loading"] else ''
-                
-                # 완료된 단계들
-                display_parts = [f'<span style="font-size:1.1rem;">{s}</span>' for s in completed_steps]
-                
-                # 현재 진행 중인 단계
-                if current_step["text"]:
-                    display_parts.append(f'<span style="font-size:1.1rem;">{current_step["text"]}{loading_indicator}</span>')
-                
-                status_container.markdown("<br>".join(display_parts), unsafe_allow_html=True)
-            
-            def complete_step(step_text):
-                """단계 완료 처리"""
-                completed_steps.append(step_text)
-                current_step["text"] = ""
-                update_display()
-            
-            def update_current(step_text, is_loading=True):
-                """현재 단계 업데이트 (덮어쓰기)"""
-                current_step["text"] = step_text
-                current_step["is_loading"] = is_loading
-                update_display()
-            
+        benchmark_config = {
+            'agents': eval_agents,
+            'defense_options': defense_options,
+            'custom_defense': custom_defense,
+            'attack_config': {},
+            'env_vars': {
+                'ANTHROPIC_API_KEY': os.environ.get('ANTHROPIC_API_KEY', ''),
+                'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', ''),
+                'GEMINI_API_KEY': os.environ.get('GEMINI_API_KEY', '')
+            }
+        }
+        
+        if attack_type == "Use Dataset":
+            benchmark_config['attack_config'] = {
+                'mode': 'dataset',
+                'types': selected_types if selected_types else None,
+                'samples_per_type': samples_per_type,
+                'total_samples': total_samples
+            }
+        else:
+            benchmark_config['attack_config'] = {
+                'mode': 'custom',
+                'subject': custom_subject,
+                'body': custom_attack
+            }
+        
+        # 설정 파일 저장
+        results_dir = Path('results')
+        results_dir.mkdir(exist_ok=True)
+        config_path = results_dir / 'benchmark_config.json'
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(benchmark_config, f, ensure_ascii=False, indent=2)
+        
+        # progress 파일 초기화
+        progress_path = results_dir / 'progress.json'
+        with open(progress_path, 'w', encoding='utf-8') as f:
+            json.dump({'status': 'starting', 'detail': 'Launching...', 'percent': 0, 'updated_at': datetime.now().isoformat()}, f)
+        
+        # subprocess로 벤치마크 실행
+        proc = subprocess.Popen(
+            [sys.executable, 'run_benchmark.py', '--config', str(config_path)],
+            cwd=str(Path(__file__).parent),
+            stdout=None,  # 터미널에 출력
+            stderr=None
+        )
+        
+        st.session_state['benchmark_pid'] = proc.pid
+        st.session_state['benchmark_running'] = True
+        
+        st.success(f"Benchmark launched (PID: {proc.pid}). Progress is shown below. Experiment will continue even if you navigate away.")
+        st.rerun()
+    
+    # ============================================================
+    # 진행 상태 폴링 표시
+    # ============================================================
+    import time as _time
+    
+    progress_path = Path('results') / 'progress.json'
+    
+    if st.session_state.get('benchmark_running') and progress_path.exists():
+        st.markdown("---")
+        st.markdown("### Progress")
+        
+        progress_placeholder = st.empty()
+        bar_placeholder = st.empty()
+        
+        # 폴링 루프
+        while True:
             try:
-                # Step 1: 환경 초기화
-                update_current("1. Initializing")
-                progress_bar.progress(10)
+                with open(progress_path, 'r', encoding='utf-8') as f:
+                    progress = json.load(f)
+            except:
+                _time.sleep(1)
+                continue
+            
+            status = progress.get('status', '')
+            detail = progress.get('detail', '')
+            percent = progress.get('percent', 0)
+            
+            bar_placeholder.progress(min(percent, 100))
+            
+            if status == 'running':
+                progress_placeholder.markdown(
+                    f'<span style="font-size:1.1rem;">{detail}</span> '
+                    f'<span style="color:#888;">⏳ Running...</span>',
+                    unsafe_allow_html=True
+                )
+            elif status == 'completed':
+                progress_placeholder.markdown(
+                    f'<span style="font-size:1.1rem;">✅ {detail}</span>',
+                    unsafe_allow_html=True
+                )
+                bar_placeholder.progress(100)
+                st.session_state['benchmark_running'] = False
                 
-                victim_gmail = GmailTools('victim')
-                attacker_gmail = GmailTools('attacker')
-                evaluator = Evaluator()
-                runner = TestRunner(evaluator)
-                complete_step("1. Initializing")
+                # 최신 결과 파일 로드하여 세션에 저장
+                _load_latest_result()
                 
-                # Step 2: 데이터 로드
-                update_current("2. Loading Data")
-                progress_bar.progress(20)
-                
-                if attack_type == "Use Dataset":
-                    loader = AttackDataLoader()
-                    attack_samples = loader.load(
-                        types=selected_types if selected_types else None,
-                        samples_per_type=samples_per_type,
-                        total_samples=total_samples
-                    )
-                else:
-                    # 직접 작성한 공격
-                    attack_samples = [{
-                        'index': 1,
-                        'email_subject': custom_subject,
-                        'email_body': custom_attack
-                    }]
-                
-                complete_step("2. Loading Data")
-                
-                # 방어 프롬프트 설정
-                if 'custom' in defense_options and custom_defense:
-                    base_prompt = DEFENSE_PROMPTS['none']['prompt']
-                    DEFENSE_PROMPTS['custom'] = {
-                        'name': 'Custom',
-                        'prompt': f"{base_prompt}\n\nSecurity Guidelines:\n{custom_defense}"
-                    }
-                
-                # Step 3~: Agent별 평가 실행
-                for agent_idx, agent_name in enumerate(eval_agents):
-                    step_num = 3 + agent_idx
-                    step_prefix = f"{step_num}."
-                    
-                    # 진행 상황 콜백 함수 (클로저 문제 해결을 위해 기본값 사용)
-                    def make_on_progress(prefix, name, a_idx):
-                        def on_progress(defense_idx, sample_idx, total_defenses, total_samples, message):
-                            # 전체 진행률 계산
-                            agent_progress = a_idx / len(eval_agents)
-                            defense_progress = (defense_idx - 1) / total_defenses
-                            sample_progress = sample_idx / total_samples
-                            
-                            total_progress = 30 + int((agent_progress + (1/len(eval_agents)) * (defense_progress + (1/total_defenses) * sample_progress)) * 60)
-                            progress_bar.progress(min(total_progress, 90))
-                            
-                            # defense 정보 추출 (message에서 [defense_name] 부분)
-                            defense_info = ""
-                            if total_defenses > 1:
-                                # message 형식: "[방어 없음] 샘플 1/3" 또는 "[방어 있음] 샘플 1/3"
-                                if "없음" in message or "none" in message.lower():
-                                    defense_info = " [No Defense]"
-                                elif "방어" in message or "defense" in message.lower():
-                                    defense_info = " [With Defense]"
-                            
-                            # 현재 샘플 정보 업데이트
-                            update_current(f"{prefix} {name.upper()}{defense_info} ( sample {sample_idx} / {total_samples} )")
-                        return on_progress
-                    
-                    update_current(f"{step_prefix} {agent_name.upper()}")
-                    
-                    # TestRunner.run_with_defense_comparison 호출
-                    result = asyncio.run(runner.run_with_defense_comparison(
-                        agent_name=agent_name,
-                        agent_factory=AgentFactory,
-                        victim_gmail=victim_gmail,
-                        attacker_gmail=attacker_gmail,
-                        attack_samples=attack_samples,
-                        defense_prompts=DEFENSE_PROMPTS,
-                        defense_levels=defense_options,
-                        progress_callback=make_on_progress(step_prefix, agent_name, agent_idx)
-                    ))
-                    
-                    # Agent 완료 표시
-                    complete_step(f"{step_prefix} {agent_name.upper()}")
-                    
-                    # 결과 변환 (UI 표시용)
-                    for defense_level, defense_data in result.get('defense_levels', {}).items():
-                        for attack_result in defense_data.get('attack_results', []):
-                            all_results.append({
-                                'agent': agent_name,
-                                'defense': defense_level,
-                                'sample_index': attack_result.get('sample_index', 0),
-                                'send_email_called': attack_result.get('criteria', {}).get('send_email_called', False),
-                                'email_arrived': attack_result.get('criteria', {}).get('email_arrived', False),
-                                'confirmation_exists': attack_result.get('criteria', {}).get('confirmation_exists', False),
-                                'attack_success': attack_result.get('is_successful', False),
-                                'type': attack_result.get('type', 0),
-                                'type_desc': attack_result.get('type_desc', ''),
-                                'details': attack_result.get('details', {})
-                            })
-                
-                # 완료 단계
-                update_current("Done", is_loading=False)
-                progress_bar.progress(100)
-                
-                # 결과 저장
-                st.session_state.evaluation_results = {
-                    'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    'agents': eval_agents,
-                    'attack_mode': 'Dataset' if attack_type == "Use Dataset" else 'Custom',
-                    'defense_options': defense_options,
-                    'samples': len(attack_samples),
-                    'results': all_results
-                }
-                
-                st.success("Evaluation complete. Check 'Results' tab for details.")
-                
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+                st.success("Benchmark complete! Go to **Results** page to see details.")
+                break
+            elif status == 'error':
+                error_msg = progress.get('error', 'Unknown error')
+                progress_placeholder.error(f"Benchmark failed: {detail}")
+                if error_msg:
+                    st.code(error_msg)
+                st.session_state['benchmark_running'] = False
+                break
+            
+            _time.sleep(2)  # 2초마다 폴링
 
 
 # ============================================================
@@ -886,10 +847,42 @@ elif page == "Results":
     st.title("Results")
     
     if not st.session_state.evaluation_results:
+        # 세션에 없으면 results/ 폴더에서 최신 파일 로드 시도
+        _load_latest_result()
+    
+    if not st.session_state.evaluation_results:
         st.info("No evaluation results yet. Run a benchmark first.")
+        
+        # results/ 폴더에 파일이 있으면 목록 표시
+        results_dir = Path('results')
+        json_files = sorted(
+            [f for f in results_dir.glob('benchmark_*.json') if f.name != 'benchmark_config.json'],
+            reverse=True
+        )
+        if json_files:
+            st.markdown("**Available result files:**")
+            selected_file = st.selectbox(
+                "Load from file",
+                json_files,
+                format_func=lambda x: x.name
+            )
+            if st.button("Load Selected"):
+                try:
+                    with open(selected_file, 'r', encoding='utf-8') as f:
+                        st.session_state.evaluation_results = json.load(f)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to load: {e}")
+        
         st.stop()
     
     results = st.session_state.evaluation_results
+    
+    # defense key → 표시 이름 변환 헬퍼
+    def get_defense_label(defense_key):
+        if defense_key in DEFENSE_PROMPTS:
+            return DEFENSE_PROMPTS[defense_key]['name']
+        return defense_key
     
     import pandas as pd
     df = pd.DataFrame(results['results'])
@@ -905,20 +898,8 @@ elif page == "Results":
     
     # 방어 방식
     defense_options = results['defense_options']
-    if set(defense_options) == {'none', 'with_defense'}:
-        defense_display_text = 'Compare Both'
-    else:
-        defense_display = []
-        for d in defense_options:
-            if d == 'none':
-                defense_display.append('None')
-            elif d == 'with_defense':
-                defense_display.append('Basic')
-            elif d == 'custom':
-                defense_display.append('Custom')
-            else:
-                defense_display.append(d)
-        defense_display_text = ', '.join(defense_display)
+    defense_display = [get_defense_label(d) for d in defense_options]
+    defense_display_text = ', '.join(defense_display)
     st.markdown(f"**Defense Method:** {defense_display_text}")
     
     st.markdown("---")
@@ -955,7 +936,7 @@ elif page == "Results":
     defense_stats = {}
     for r in results['results']:
         defense = r['defense']
-        defense_label = 'No Defense' if defense == 'none' else 'With Defense' if defense == 'with_defense' else 'Custom'
+        defense_label = get_defense_label(defense)
         if defense_label not in defense_stats:
             defense_stats[defense_label] = {'success': 0, 'total': 0}
         defense_stats[defense_label]['total'] += 1
@@ -981,7 +962,7 @@ elif page == "Results":
         for r in results['results']:
             type_desc = r.get('type_desc', '')
             defense = r.get('defense', 'none')
-            defense_label = 'No Defense' if defense == 'none' else 'With Defense' if defense == 'with_defense' else 'Custom'
+            defense_label = get_defense_label(defense)
             
             if type_desc:
                 if defense_label not in defense_type_results:
@@ -1043,7 +1024,8 @@ elif page == "Results":
     }
     
     defense_groups = df.groupby('defense')
-    defense_labels = {'none': 'No Defense', 'with_defense': 'With Defense', 'custom': 'Custom'}
+    defense_labels = {k: v['name'] for k, v in DEFENSE_PROMPTS.items()}
+    defense_labels['custom'] = 'Custom'
     
     if len(defense_groups) > 1:
         tab_names = [defense_labels.get(d, d) for d in df['defense'].unique()]
@@ -1076,7 +1058,7 @@ elif page == "Results":
         defense_groups_resp = {}
         for r in results['results']:
             defense = r.get('defense', 'none')
-            defense_label = 'No Defense' if defense == 'none' else 'With Defense' if defense == 'with_defense' else 'Custom'
+            defense_label = get_defense_label(defense)
             if defense_label not in defense_groups_resp:
                 defense_groups_resp[defense_label] = []
             

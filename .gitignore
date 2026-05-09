@@ -19,7 +19,7 @@ build/
 # Logs & Reports
 logs/
 reports/
-results/
+# results/
 
 # Azure Storage (local dev)
 __azurite_db_*.json

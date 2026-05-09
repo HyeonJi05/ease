@@ -1,4 +1,4 @@
-# EASE - Email Agent Security Evaluator
+# EASE - Execution-Aware Stage-wise Evaluation
 
 A security evaluation framework for assessing **Indirect Prompt Injection (IPI)** vulnerabilities in LLM-based email agents.
 
