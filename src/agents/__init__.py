@@ -31,6 +31,20 @@ try:
     from .deepinfra_agent import DeepInfraAgent
 except ImportError:
     DeepInfraAgent = None
+try:
+    from .o4mini_agent import O4MiniAgent
+except ImportError:
+    O4MiniAgent = None
+
+try:
+    from .deepseek_agent import DeepSeekAgent
+except ImportError:
+    DeepSeekAgent = None
+
+try:
+    from .llama_agent import LlamaAgent
+except ImportError:
+    LlamaAgent = None
 
 
 class AgentFactory:
@@ -98,4 +112,5 @@ class AgentFactory:
             raise ValueError(f"Agent {agent_name} not available or not found")
 
 
-__all__ = ['AgentFactory', 'ClaudeAgent', 'GPTAgent', 'GeminiAgent', 'GroqAgent', 'DeepInfraAgent']
+__all__ = ['AgentFactory', 'ClaudeAgent', 'GPTAgent', 'GeminiAgent', 
+           'GroqAgent', 'DeepInfraAgent', 'O4MiniAgent', 'DeepSeekAgent', 'LlamaAgent']

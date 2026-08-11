@@ -1,6 +1,14 @@
 """
-GPT-4o Agent
-OpenAI API와 Gmail Tools 연동 (base.py 상속)
+DeepSeek Agent
+DeepSeek V3.2 API와 Gmail Tools 연동 (base.py 상속)
+
+GPTAgent와의 차이점:
+1. base_url: "https://api.deepseek.com" 추가
+2. model: "gpt-4o" → "deepseek-chat" (자동으로 최신 V3.2 적용)
+3. api_key: OPENAI_API_KEY → DEEPSEEK_API_KEY
+
+나머지 도구 정의, 호출 루프, _execute_gmail_tool()은 GPTAgent와 100% 동일.
+DeepSeek API는 OpenAI SDK와 완전 호환 (finish_reason, tool_calls 형식 동일).
 """
 import asyncio
 from openai import AsyncOpenAI
@@ -12,34 +20,35 @@ from .tool_name_mapper import ToolNameMapper
 from src.config import DEFENSE_PROMPTS
 
 
-class GPTAgent(EmailAgent):
-    """OpenAI GPT-4o를 통한 이메일 에이전트"""
+class DeepSeekAgent(EmailAgent):
+    """DeepSeek V3.2를 통한 이메일 에이전트 (OpenAI SDK 호환)"""
         
     def __init__(self, api_key: str, gmail_tools, system_prompt: str = None):
         """
-        GPT Agent 초기화
+        DeepSeek Agent 초기화
         
         Args:
-            api_key: OpenAI API 키
+            api_key: DeepSeek API 키
             gmail_tools: GmailTools 인스턴스
             system_prompt: 시스템 프롬프트 (없으면 방어 없음 사용)
         """
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com"  # ✅ DeepSeek API 엔드포인트
+        )
         self.gmail = gmail_tools
-        # ✅ system_prompt이 None이면 config에서 기본값 가져오기
         if system_prompt is None:
             self.system_prompt = DEFENSE_PROMPTS['none']['prompt']
         else:
             self.system_prompt = system_prompt
-        self.model = "gpt-4o"
+        self.model = "deepseek-chat"  # ✅ 자동으로 최신 V3.2 적용
     
     def _default_system_prompt(self) -> str:
         """기본 시스템 프롬프트 (방어 없음)"""
-        # ✅ 이 부분을 config에서 가져오기로 변경
         return DEFENSE_PROMPTS['none']['prompt']
 
     def _get_gmail_tools_for_gpt(self) -> List[Dict]:
-        """Gmail Tools를 OpenAI function format으로 변환"""
+        """Gmail Tools를 OpenAI function format으로 변환 (GPTAgent와 동일)"""
         
         tools = [
             {
@@ -179,18 +188,11 @@ class GPTAgent(EmailAgent):
     
     def get_agent_name(self) -> str:
         """base.py의 추상 메서드 구현"""
-        return 'gpt'
+        return 'deepseek'
     
     async def process_message(self, user_message: str, conversation_history: List[Dict] = None) -> Dict[str, Any]:
         """
-        사용자 메시지 처리 (base.py의 추상 메서드 구현)
-        
-        Args:
-            user_message: 사용자 입력
-            conversation_history: 이전 대화 기록
-        
-        Returns:
-            {'message': str, 'tools_used': List[str], 'conversation': List[Dict], 'raw_response': Any}
+        사용자 메시지 처리 (GPTAgent와 동일한 로직)
         """
         if conversation_history is None:
             conversation_history = []
@@ -204,7 +206,6 @@ class GPTAgent(EmailAgent):
         tools = self._get_gmail_tools_for_gpt()
         tools_used = []
         
-        # GPT API 호출 루프
         while True:
             response = await self.client.chat.completions.create(
                 model=self.model,
@@ -215,16 +216,12 @@ class GPTAgent(EmailAgent):
             )
             self._log_token_usage(response, "openai")
             
-            # finish_reason 확인
             finish_reason = response.choices[0].finish_reason
             assistant_message = response.choices[0].message
             
             if finish_reason == "stop":
-                # 최종 응답
                 text_content = assistant_message.content or ""
-                
-                # 도구명 정규화
-                tools_used = ToolNameMapper.normalize('gpt', tools_used)
+                tools_used = ToolNameMapper.normalize('deepseek', tools_used)
                 
                 return {
                     'message': text_content,
@@ -239,7 +236,6 @@ class GPTAgent(EmailAgent):
                 }
             
             elif finish_reason == "tool_calls":
-                # 도구 호출
                 messages.append({
                     "role": "assistant",
                     "content": assistant_message.content,
@@ -256,7 +252,6 @@ class GPTAgent(EmailAgent):
                     ]
                 })
                 
-                # 도구 실행 및 결과 추가
                 for tool_call in assistant_message.tool_calls:
                     tool_name = tool_call.function.name
                     tool_input = json.loads(tool_call.function.arguments)
@@ -265,13 +260,11 @@ class GPTAgent(EmailAgent):
                     tools_used.append(tool_name)
                     
                     try:
-                        # Gmail Tools 실행
                         result = self._execute_gmail_tool(tool_name, tool_input)
                         content = json.dumps(result, ensure_ascii=False)
                     except Exception as e:
                         content = json.dumps({"success": False, "error": str(e)})
                     
-                    # 각 도구 결과를 개별 메시지로 추가 (OpenAI 형식)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_call.id,
@@ -287,7 +280,7 @@ class GPTAgent(EmailAgent):
                 }
     
     def _execute_gmail_tool(self, tool_name: str, tool_input: dict):
-        """Gmail Tools 실행"""
+        """Gmail Tools 실행 (GPTAgent와 동일)"""
         
         if tool_name == "get_unread_emails":
             max_results = tool_input.get("max_results", 10)

@@ -5,6 +5,11 @@
 1. attack_dataset.csv 로드 (6개 공격 유형)
 2. 유형별 필터링 및 랜덤 추출
 3. 이메일 필드명을 TestRunner 호환 형식으로 변환
+
+[수정 이력]
+- 인덱스 재할당 제거: 'index' 필드는 항상 attack_dataset.csv의 원본 행 번호
+  (= sample_index)를 가리킴. 샘플링/필터링 후에도 보존되므로 결과 CSV의
+  sample_index와 type 컬럼이 항상 데이터셋과 일관성을 유지함.
 """
 
 import csv
@@ -26,11 +31,11 @@ ATTACK_TYPES = {
 
 class AttackDataLoader:
     """공격 데이터 로더 - CSV 기반"""
-    
+
     def __init__(self, data_file: Optional[str] = None):
         """
         AttackDataLoader 초기화
-        
+
         Args:
             data_file: CSV 데이터 파일 경로
                       없으면 기본 경로 사용: data/attack_dataset.csv
@@ -40,94 +45,99 @@ class AttackDataLoader:
             self.data_file = project_root / 'data' / 'attack_dataset.csv'
         else:
             self.data_file = Path(data_file)
-        
+
         self.attacks = []
         self.metadata = {}
-    
-    def load(self, 
-             types: Optional[List[int]] = None, 
+
+    def load(self,
+             types: Optional[List[int]] = None,
              samples_per_type: Optional[int] = None,
              total_samples: Optional[int] = None,
              random_seed: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         공격 데이터 로드 (유형별 필터링 및 랜덤 추출)
-        
+
         Args:
             types: 선택할 유형 번호 리스트 (None이면 전체)
             samples_per_type: 유형별 추출 샘플 수 (None이면 전체)
             total_samples: 전체에서 랜덤 추출할 샘플 수 (samples_per_type과 함께 사용 불가)
             random_seed: 랜덤 시드 (재현성)
-        
+
         Returns:
             List[Dict]: 공격 샘플 리스트
+                       각 dict의 'index' 필드는 attack_dataset.csv의 원본 행 번호
+                       (= sample_index, 영구 식별자)
         """
         if random_seed is not None:
             random.seed(random_seed)
-        
+
         # CSV 파일 존재 확인
         if not self.data_file.exists():
             print(f"❌ 데이터 파일 없음: {self.data_file}")
             return []
-        
+
         try:
             all_attacks = self._load_csv()
-            
+
             # 유형 필터링
             if types:
                 all_attacks = [a for a in all_attacks if a.get('type') in types]
-            
+
             # 샘플 추출
             if samples_per_type is not None:
                 # 유형별로 랜덤 추출
-                result = []
                 type_groups = {}
                 for attack in all_attacks:
                     t = attack.get('type')
                     if t not in type_groups:
                         type_groups[t] = []
                     type_groups[t].append(attack)
-                
+
+                result = []
                 for t, attacks in type_groups.items():
                     sampled = random.sample(attacks, min(samples_per_type, len(attacks)))
                     result.extend(sampled)
-                
+
                 self.attacks = result
             elif total_samples is not None:
                 # 전체에서 랜덤 추출
                 self.attacks = random.sample(all_attacks, min(total_samples, len(all_attacks)))
             else:
                 self.attacks = all_attacks
-            
-            # 인덱스 재할당
-            for idx, attack in enumerate(self.attacks):
-                attack['index'] = idx
-            
+
+            # ※ [중요] 'index'는 _load_csv()에서 부여한 원본 행 번호를 그대로 보존.
+            #         샘플링/필터링 후에도 재할당하지 않음. 그래야 결과 CSV의
+            #         sample_index와 type 컬럼이 데이터셋과 항상 일관됨.
+
+            # 무결성 자가 검증: 모든 샘플의 (index, type)가 원본 데이터와 일치해야 함
+            self._verify_integrity(self.attacks)
+
             self.metadata['total_samples'] = len(self.attacks)
             self.metadata['data_file'] = str(self.data_file)
-            
+
             print(f"✅ 데이터 로드 성공: {len(self.attacks)}개 샘플")
-            
+
             return self.attacks
-        
+
         except Exception as e:
             print(f"❌ 데이터 로드 오류: {e}")
             import traceback
             traceback.print_exc()
             return []
-    
+
     def _load_csv(self) -> List[Dict[str, Any]]:
         """CSV 파일에서 공격 데이터 로드"""
         attacks = []
-        
+
         try:
             with open(self.data_file, 'r', encoding='utf-8-sig') as f:
                 reader = csv.DictReader(f)
-                
+
                 for idx, row in enumerate(reader):
                     attack_type = int(row.get('type', 0)) if row.get('type', '').isdigit() else 0
-                    
+
                     attack = {
-                        'index': idx,
+                        'index': idx,  # ← 원본 행 번호 = sample_index (영구 식별자)
                         'email_subject': row.get('subject', ''),
                         'email_body': row.get('body', ''),
                         'full_text': row.get('full_text', ''),
@@ -137,23 +147,56 @@ class AttackDataLoader:
                         'attack_type': 'indirect_prompt_injection',
                         'source': 'attack_dataset.csv'
                     }
-                    
+
                     attacks.append(attack)
-            
+
             return attacks
-        
+
         except Exception as e:
             print(f"❌ CSV 파일 로드 오류: {e}")
             return []
-    
+
+    def _verify_integrity(self, attacks: List[Dict[str, Any]]) -> None:
+        """
+        샘플의 (index, type) 매핑이 attack_dataset.csv 원본과 일치하는지 검증.
+
+        샘플링이나 필터링이 들어가도 'index' 필드가 원본 sample_index를 유지하는지
+        확인하기 위한 안전장치. 한 번이라도 인덱스 재할당이 끼어들면 여기서 잡힌다.
+        """
+        # 원본 데이터셋의 sample_index → type 매핑 구축
+        ref_map = {}
+        try:
+            with open(self.data_file, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                for idx, row in enumerate(reader):
+                    t = int(row.get('type', 0)) if row.get('type', '').isdigit() else 0
+                    ref_map[idx] = t
+        except Exception as e:
+            print(f"⚠️ 무결성 검증 스킵 (참조 맵 로드 실패): {e}")
+            return
+
+        bad = []
+        for a in attacks:
+            si = a.get('index')
+            t = a.get('type')
+            if si not in ref_map:
+                bad.append((si, t, '원본에 없음'))
+            elif ref_map[si] != t:
+                bad.append((si, t, f'원본 type={ref_map[si]}'))
+
+        if bad:
+            msg = (f"❌ 무결성 위반: index↔type 매핑이 원본과 다른 샘플 {len(bad)}건. "
+                   f"예시: {bad[:3]}")
+            raise ValueError(msg)
+
     def get_type_stats(self) -> Dict[int, Dict[str, Any]]:
         """유형별 통계 반환"""
         if not self.data_file.exists():
             return {}
-        
+
         all_attacks = self._load_csv()
         stats = {}
-        
+
         for attack in all_attacks:
             t = attack.get('type')
             if t not in stats:
@@ -162,13 +205,13 @@ class AttackDataLoader:
                     'name': attack.get('type_desc', ATTACK_TYPES.get(t, {}).get('name', f'Type {t}'))
                 }
             stats[t]['count'] += 1
-        
+
         return stats
-    
+
     def get_random_sample(self, count: int = 1, types: Optional[List[int]] = None) -> List[Dict[str, Any]]:
         """무작위 샘플 선택"""
         return self.load(types=types, total_samples=count)
-    
+
     def reset(self):
         """데이터 초기화"""
         self.attacks = []

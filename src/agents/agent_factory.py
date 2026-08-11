@@ -163,6 +163,7 @@ class AgentFactory:
             >>> AgentFactory._get_class_name('gpt')
             'GPTAgent'
         """
+        
         name_mapping = {
             'claude': 'ClaudeAgent',
             'gpt': 'GPTAgent',
@@ -170,8 +171,10 @@ class AgentFactory:
             'groq': 'GroqAgent',
             'deepinfra': 'DeepInfraAgent',
             'external': 'ExternalAgent',
+            'o4mini': 'O4MiniAgent',       # ✅ 추가
+            'deepseek': 'DeepSeekAgent',   # ✅ 추가
+            'llama': 'LlamaAgent',        # ✅ 추가
         }
-        
         return name_mapping.get(agent_name, f"{agent_name.capitalize()}Agent")
     
     @staticmethod
@@ -194,7 +197,10 @@ class AgentFactory:
             'gemini': 'GEMINI_API_KEY',
             'groq': 'GROQ_API_KEY',
             'deepinfra': 'DEEPINFRA_API_KEY',
-            'external': None,  # API 키 불필요
+            'external': None,
+            'o4mini': 'OPENAI_API_KEY',      # ✅ 추가 (GPT와 동일 키)
+            'deepseek': 'DEEPSEEK_API_KEY',  # ✅ 추가
+            'llama': 'TOGETHER_API_KEY',    # ✅ 추가
         }
         
         env_var = api_key_mapping.get(agent_name)
@@ -224,7 +230,7 @@ class AgentFactory:
         Returns:
             list: 지원하는 Agent 이름 목록
         """
-        return ['claude', 'gpt', 'gemini', 'external']
+        return ['claude', 'gpt', 'gemini', 'o4mini', 'deepseek', 'llama', 'external']
     
     @staticmethod
     def get_available_agents() -> dict:

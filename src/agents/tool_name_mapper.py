@@ -80,6 +80,43 @@ class ToolNameMapper:
             'get_labels': 'get_labels',
             'add_label': 'add_label',
         },
+        # 세 모델 모두 OpenAI 호환 snake_case이므로 GPT와 동일한 매핑
+        'o4mini': {
+            'get_unread_emails': 'get_unread_emails',
+            'read_email': 'read_email',
+            'send_email': 'send_email',
+            'trash_email': 'trash_email',
+            'mark_as_read': 'mark_as_read',
+            'mark_as_unread': 'mark_as_unread',
+            'search_emails': 'search_emails',
+            'delete_email_permanently': 'delete_email_permanently',
+            'get_labels': 'get_labels',
+            'add_label': 'add_label',
+        },
+        'deepseek': {
+            'get_unread_emails': 'get_unread_emails',
+            'read_email': 'read_email',
+            'send_email': 'send_email',
+            'trash_email': 'trash_email',
+            'mark_as_read': 'mark_as_read',
+            'mark_as_unread': 'mark_as_unread',
+            'search_emails': 'search_emails',
+            'delete_email_permanently': 'delete_email_permanently',
+            'get_labels': 'get_labels',
+            'add_label': 'add_label',
+        },
+        'llama': {
+            'get_unread_emails': 'get_unread_emails',
+            'read_email': 'read_email',
+            'send_email': 'send_email',
+            'trash_email': 'trash_email',
+            'mark_as_read': 'mark_as_read',
+            'mark_as_unread': 'mark_as_unread',
+            'search_emails': 'search_emails',
+            'delete_email_permanently': 'delete_email_permanently',
+            'get_labels': 'get_labels',
+            'add_label': 'add_label',
+        },
     }
     
     @staticmethod

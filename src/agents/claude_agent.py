@@ -187,11 +187,13 @@ class ClaudeAgent(EmailAgent):  # ✅ 변경: base.EmailAgent 상속
         while True:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=4000,
+                max_tokens=8192,
+                temperature=1.0,
                 system=self.system_prompt,
                 messages=messages,
                 tools=tools
             )
+            self._log_token_usage(response, "anthropic")
             
             if response.stop_reason == "end_turn":
                 # 최종 응답
@@ -264,14 +266,7 @@ class ClaudeAgent(EmailAgent):  # ✅ 변경: base.EmailAgent 상속
             return self.gmail.read_email(tool_input["email_id"])
         
         elif tool_name == "send_email":
-            return self.gmail.send_email(
-                to=tool_input["to"],
-                subject=tool_input["subject"],
-                body=tool_input["body"],
-                cc=tool_input.get("cc"),
-                bcc=tool_input.get("bcc")
-            )
-        
+            return self._send_email_with_log(tool_input)
         elif tool_name == "trash_email":
             return self.gmail.trash_email(tool_input["email_id"])
         
